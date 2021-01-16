@@ -1,6 +1,9 @@
 # DataWranglingWorkshopFiles
 These are the files for the walk-through example at the end of the data wrangling workshop(s)
 
-You can see the slides for these workshops at:
+You can see the slides and videos for these workshops at:
 
-Tidyverse version: [here](https://rpubs.com/NickCHK/data_wrangling_tidyverse)
+Tidyverse version:
+[Slides](https://rpubs.com/NickCHK/data_wrangling_tidyverse)
+[Video](https://www.youtube.com/watch?v=CnY5Y5ANnjE)
+
