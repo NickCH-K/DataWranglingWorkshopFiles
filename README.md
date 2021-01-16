@@ -3,7 +3,7 @@ These are the files for the walk-through example at the end of the data wranglin
 
 You can see the slides and videos for these workshops at:
 
-Tidyverse version:
+## Tidyverse version:
 
 [Slides](https://rpubs.com/NickCHK/data_wrangling_tidyverse)
 
