@@ -9,3 +9,8 @@ You can see the slides and videos for these workshops at:
 
 [Video](https://www.youtube.com/watch?v=CnY5Y5ANnjE)
 
+## data.table version:
+
+[Slides](https://rpubs.com/NickCHK/data_wrangling_data_table)
+
+[Video](https://www.youtube.com/watch?v=EdPKcy1WKD0)
