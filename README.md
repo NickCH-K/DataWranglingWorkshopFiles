@@ -18,3 +18,5 @@ You can see the slides and videos for these workshops at:
 ## pandas version:
 
 [Slides](https://rpubs.com/NickCHK/data_wrangling_pandas)
+
+[Video](https://www.youtube.com/watch?v=6rDqwji7eMc)
