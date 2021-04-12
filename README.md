@@ -1,7 +1,7 @@
 # DataWranglingWorkshopFiles
 These are the files for the walk-through example at the end of the data wrangling workshop(s)
 
-You can see the slides and videos for these workshops at:
+You can see the slides and videos for these workshops at the links below. Also, the raw RMD files to make the slides are also in this repo. 
 
 ## Tidyverse version:
 
