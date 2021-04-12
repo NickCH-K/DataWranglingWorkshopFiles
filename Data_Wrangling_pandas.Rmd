@@ -1,0 +1,929 @@
+---
+title: "Data Wrangling in Pandas"
+author: "Nick Huntington-Klein w/Andrew Hornstra"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:   
+  revealjs::revealjs_presentation:
+    theme: simple
+    transition: slide
+    self_contained: true
+    smart: true
+    fig_caption: true
+    reveal_options:
+      slideNumber: true
+      
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(DT)
+library(purrr)
+library(readxl)
+library(reticulate)
+```
+
+## Data Wrangling
+
+```{r, results = 'asis'}
+cat("
+<style>
+.reveal section img {
+  border: none !important;
+  box-shadow: none;
+}
+</style>")
+```
+
+```{python, echo = FALSE}
+import pandas as pd
+```
+
+Welcome to the Data Wrangling Workshop!
+
+- The goal of data wrangling
+- How to think about data wrangling
+- Technical tips for data wrangling in Python using the **pandas** package
+- A walkthrough example
+
+## Limitations
+
+- I will assume you already have some familiarity with Python in general
+- We only have so much time! I won't be going into *great* detail on the use of all the technical commands, but by the end of this you will know what's out there and generally how it's used
+- Shorthand: `pd` is from `import pandas as pd`, and `df` will be shorthand for our `DataFrame` object
+- *As with any computer skill, a teacher's comparative advantage is in letting you know what's out there. The* **real learning** *comes from practice and Googling. So take what you see here today, find yourself a project, and do it! It will be awful but you will learn an astounding amount by the end*
+
+
+## Data Wrangling
+
+What is data wrangling?
+
+- You have data
+- It's not ready for you to run your model
+- You want to get it ready to run your model
+- Ta-da!
+
+## The Core of Data Wrangling
+
+- Always **look directly at your data so you know what it looks like**
+- Always **think about what you want your data to look like when you're done**
+- Think about **how you can take information from where it is and put it where you want it to be**
+- After every step, **look directly at your data again to make sure it's doing what you think it's doing**
+
+I help a lot of people with their problems with data wrangling. Their issues are almost always *not doing one of these four things*, much more so than having trouble coding or anything like that
+
+## The Core of Data Wrangling
+
+- How can you "look at your data"?
+- Literally is one way - `print` the `DataFrame` to have it print out
+- Summary statistics tables: `df.describe(include = 'all')`
+- Checking what values it takes: `pd.unique()` on individual variables
+- Look for: What values are there, what the observations look like, presence of missing or unusable data, how the data is structured
+
+## The Stages of Data Wrangling
+
+- From records to data
+- From data to tidy data
+- From tidy data to data for your analysis
+
+# From Records to Data
+
+## From Records to Data
+
+Not something we'll be focusing on today! But any time the data isn't in a workable format, like a spreadsheet or database, someone's got to get it there!
+
+- "Google Trends has information on the popularity of our marketing terms, go get it!"
+- "Here's a 600-page unformatted PDF of our sales records for the past three years. Turn it into a database."
+- "Here are scans of the 15,000 handwritten doctor's notes at the hospital over the past year"
+- "Here's access to the website. The records are in there somewhere."
+- "Go do a survey"
+
+## From Records to Data: Tips!
+
+- Do as little by hand as possible. It's a lot of work and you *will* make mistakes
+- *Look at the data* a lot!
+- Check for changes in formatting - it's common for things like "this enormous PDF of our tables" or "eight hundred text files with the different responses/orders" to change formatting halfway through
+- When working with something like a PDF or a bunch of text files, think "how can I tell a computer to spot where the actual data is?"
+- If push comes to shove, or if the data set is small enough, you can do by-hand data entry. Be very careful!
+
+## Reading Files
+
+One common thing you run across is data split into multiple files. How can we read these in and compile them?
+
+- `grob` from the **grob** pakcage produces a vector of filenames
+- Use a `for` loop to iterate over that vector and read in the data, as well as any processing
+- Combine the results with `df.append()`!
+
+## Reading Files
+
+For example, imagine you have 200 monthly sales reports in Excel files. You just want to pull cell C2 (total sales) and cell B43 (employee of the month) and combine them together.
+
+```{python, echo = TRUE, eval = FALSE}
+import glob
+import os
+
+# Get relative filepaths
+partial_paths = glob.glob("../Monthly_reports/*sales*")
+# turn them into absolute filepaths
+file_list = [os.path.abspath(file) for file in partial_paths]
+```
+
+## Reading Files
+
+We can simplify by making a little function that processes each of the reports as it's read. Then, use` with `pd.read_excel()` and then our function, then appendit together!
+
+How do I get `df[1,3]`, etc.? Because I look straight at the files and check where the data I want is, so I can pull it and put it where I want it!
+
+## Reading Files
+
+```{python, echo = TRUE, eval = FALSE}
+# Initialize place for data to go
+df = pd.DataFrame(columns=["sales", "employee"])
+for file in file_list:
+    report = pd.read_excel(file)
+    sales = report.iloc[1, 3]
+    employee = report.iloc[42, 1]
+    df = df.append(
+        pd.DataFrame(
+            {
+                "sales": sales,
+                "employee": employee
+            }, index=[0]
+        )
+    )
+```
+
+# From Data to Tidy Data 
+
+## From Data to Tidy Data
+
+- **Data** is any time you have your records stored in some structured format
+- But there are many such structures! They could be across a bunch of different tables, or perhaps a spreadsheet with different variables stored randomly in different areas, or one table per observation
+- These structures can be great for *looking up values*. That's why they are often used in business or other settings where you say "I wonder what the value of X is for person/day/etc. N"
+- They're rarely good for *doing analysis* (calculating statistics, fitting models, making visualizations)
+- For that, we will aim to get ourselves *tidy data* (see [this walkthrough](https://tidyr.tidyverse.org/articles/tidy-data.html) )
+
+## Tidy Data
+
+In tidy data:
+
+1. Each variable forms a column
+1. Each observation forms a row
+1. Each type of observational unit forms a table
+
+```{r}
+df <- data.frame(Country = c('Argentina','Belize','China'), TradeImbalance = c(-10, 35.33, 5613.32), PopulationM = c(45.3, .4, 1441.5))
+datatable(df)
+```
+
+## Tidy Data
+
+The variables in tidy data come in two types:
+
+1. *Identifying Variables*/*Keys* are the columns you'd look at to locate a particular observation. 
+1. *Measures*/*Values* are the actual data.
+
+Which are they in this data?
+
+```{r}
+df <- data.frame(Person = c('Chidi','Chidi','Eleanor','Eleanor'), Year = c(2017, 2018, 2017, 2018), Points = c(14321,83325, 6351, 63245), ShrimpConsumption = c(0,13, 238, 172))
+datatable(df)
+```
+## Tidy Data
+
+- *Person* and *Year* are our identifying variables. The combination of person and year *uniquely identifies* a row in the data. Our "observation level" is person and year. There's only one row with Person == "Chidi" and Year == 2018
+- *Points* and *ShrimpConsumption* are our measures. They are the things we have measured for each of our observations
+- Notice how there's one row per observation (combination of Person and Year), and one column per variable
+- Also this table contains only variables that are at the Person-Year observation level. Variables at a different level (perhaps things that vary between Person but don't change over Year) would go in a different table, although this last one is less important
+
+## Tidying Non-Tidy Data
+
+- So what might data look like when it's *not* like this, and how can we get it this way? 
+- Here's one common example, a *count table* (not tidy!) where each column is a *value*, not a *variable*
+
+```{r}
+data("relig_income")
+datatable(relig_income)
+```
+
+## Tidying Non-tidy Data
+
+- Here's another, where the "chart position" variable is split across 52 columns, one for each week
+
+```{r}
+data("billboard")
+datatable(billboard)
+```
+
+
+
+## Tidying Non-Tidy Data
+
+- The first big tool in our tidying toolbox is the *pivot*
+- A pivot takes a single row with K columns and turns it into K rows with 1 column, using the identifying variables/keys to keep things lined up. 
+- This can also be referred to as going from "wide" data to "long" data
+- Long to wide is also an option
+- In every statistics package, pivot functions are notoriously fiddly. Always read the help file, and do trial-and-error! Make sure it worked as intended.
+
+## Tidying Non-Tidy Data
+
+Check our steps!
+
+- We looked at the data
+- Think about how we want the data to look - one row per (keys) artist, track, and week, and a column for the chart position of that artist/track in that week, and the date entered for that artist/track (value)
+- How can we carry information from where it is to where we want it to be? With a pivot!
+- And afterwards we'll look at the result (and, likely, go back and fix our pivot code - the person who gets a pivot right the first try is a mysterious genius)
+
+## Pivot
+
+- In **pandas** we have the functions `pd.wide_to_long()` and `pd.long_to_wide()` (there is also the more-powerful `pd.melt()` and `pd.pivot_table()` but these may be trickier to use). Here we want wide-to-long so we use `pd.wide_to_long()`
+- This asks for:
+- `df` (the data set you're working with)
+- `stubnames` (the columns to pivot) - a string (or vector) with the characters that start the cols to pivot
+- `i` (the existing ID variables)
+- `j` (the name of the new ID variable)
+
+## Pivot
+
+
+```{python, echo = TRUE, eval = FALSE}
+pd.wide_to_long(
+    billboard,
+    "wk",
+    i=["artist", "track", "date.entered"],
+    j="week"
+).rename(
+    {"wk": "chart_position"},
+    axis=1
+).dropna()
+```
+
+```{r, echo = FALSE}
+billboard2 <- billboard %>%
+  mutate(across(, as.character))
+```
+
+```{python, echo = FALSE}
+billboard = r.billboard2
+pd.wide_to_long(
+    billboard,
+    "wk",
+    i=["artist", "track", "date.entered"],
+    j="week"
+).rename(
+    {"wk": "chart_position"},
+    axis=1
+).dropna()
+```
+
+
+## Variables Stored as Rows
+
+- Here we have tax form data where each variable is a row, but we have multiple tables For this one we can use `pivot_wider()`, and then combine multiple individuals with `bind_rows()`
+
+```{python, echo = FALSE}
+tax_data = pd.DataFrame(
+    {
+        "index":
+        [
+            0, 0, 0, 0
+        ],
+        "Value":
+        [
+            "Person", "Income", "Deductible", "AGI"
+        ],
+        "TaxFormRow":
+        [
+            "James Acaster", 112341, 24000, 88341
+        ],
+    }
+)
+
+tax_data2 = pd.DataFrame(
+    {
+        "index":
+        [
+            1, 1, 1, 1
+        ],
+        "Value":
+        [
+            "Person", "Income", "Deductible", "AGI"
+        ],
+        "TaxFormRow":
+        [
+            'Eddie Izzard',325122, 16000, 325122 - 16000
+        ],
+    }
+)
+print(tax_data)
+```
+
+## Variables Stored as Rows
+
+- `pivot()` is a `DataFrame` method that needs:
+- `index` (the columns that give us the key - what should it be here?)
+- `columns` (the column containing what will be the new variable names)
+- `values` (the column containing the new values)
+
+## Variables Stored as Rows
+
+```{python, echo = TRUE}
+tax_data.pivot(
+    index="index",
+    columns="Value",
+    values="TaxFormRow"
+)
+```
+
+
+## Variables Stored as Rows
+
+We can use `.append()` to stack data sets with the same variables together, handy for compiling data from different sources
+
+```{python, echo = TRUE}
+tax_data.pivot(
+    index="index",
+    columns="Value",
+    values="TaxFormRow"
+).append(tax_data2.pivot(
+    index="index",
+    columns="Value",
+    values="TaxFormRow"
+))
+```
+
+## Merging Data
+
+- Commonly, you will need to link two datasets together based on some shared keys
+- For example, if one dataset has the variables "Person", "Year", and "Income" and the other has "Person" and "Birthplace"
+
+```{python, echo = FALSE}
+person_year_data = pd.DataFrame(
+    {
+        "Person":
+        [
+            "Ramesh", "Ramesh", "Whitney", "Whitney", "David", "David"
+        ],
+        "Year":
+        [
+            2014, 2015, 2014, 2015, 2014, 2015
+        ],
+        "Income":
+        [
+            81314, 82155, 131292, 141262, 102452, 105133
+        ]
+    }
+)
+person_data = pd.DataFrame(
+    {
+        "Person":
+        [
+            "Ramesh",
+            "Whitney"
+        ],
+        "Birthplace":
+        [
+            "Crawley",
+            "Washington D.C."
+        ]
+    }
+)
+print(person_year_data)
+```
+
+## Merging Data
+
+That was `person_year_data`. And now for `person_data`:
+
+```{python}
+print(person_data)
+```
+
+## Merging Data
+
+- The `.merge()` method will do this. The different `how` options varieties just determine what to do with rows you *don't* find a match for. `'left'` keeps non-matching rows from the first dataset but not the second, `'right'` from the second not the first, `'outer'` from both, `'inner'` from neither
+- Can deal with mismatched named on either side by using `'left_on'` etc. instead of `'on'`
+            
+## Merging Data
+
+```{python, echo = TRUE}
+person_year_data.merge(
+    person_data,
+    how='left',
+    on='Person'
+)
+```
+
+```{python, echo = TRUE}
+person_year_data.merge(
+    person_data,
+    how='right',
+    on='Person'
+)
+```
+
+## Merging Data
+
+- Things work great if the list of variables in `by` is the exact observation level in *at least one* of the two data sets
+- But if there are multiple observations per combination of `by` variables in *both*, that's a problem! It will create all the potential matches, which may not be what you want:
+
+```{python, echo = TRUE}
+a = pd.DataFrame({"name": ["A", "A", "B", "C"],
+        "Year": [2014, 2015, 2014, 2014], "Value": range(1, 5) })
+b = pd.DataFrame({"name": ["A", "A", "B", "C", "C"],
+        "Characteristic": ["Up", "Down", "Up", "Left", "Right"]})
+a.merge(b, how='left', on="name")
+```
+
+## Merging Data
+
+- This is why it's *super important* to always know the observation level of your data. You can check it by seeing if there are any duplicate rows among what you *think* are your key variables: if we think that `Person` is a key for data set `a`, then `a.duplicated(["Person"]).max()` will return `True`, showing us we're wrong
+- At that point you can figure out how you want to proceed - drop observations so it's the observation level in one? Accept the multi-match? Pick only one of the multi-matches?
+              
+# From Tidy Data to Your Analysis
+
+## From Tidy Data to Your Analysis
+
+- Okay! We now have, hopefully, a nice tidy data set with one column per variable, one row per observation, we know what the observation level is!
+- That doesn't mean our data is ready to go! We likely have plenty of cleaning and manipulation to go before we are ready for analysis
+  
+## Filtering
+
+- Filtering limits the data to the observations that fulfill a certain *logical condition*. It *picks rows*.
+- For example, `Income > 100000` is `True` for everyone with income above 100000, and `False` otherwise. So filtering on `Income > 100000` should give you every row with income above 100000.
+- Two main ways in pandas: `.query()` and `.loc[]`
+
+```{python, echo = TRUE}
+full_person_merge = person_year_data.merge(person_data, how='left', on='Person')
+full_person_merge.query("Income > 100000")
+full_person_merge.loc[full_person_merge["Income"] > 100000]
+```
+
+## Logical Conditions
+
+- A lot of programming in general is based on writing logical conditions that check whether something is true
+- In Python, if the condition is true, it returns `True`, which turns into 1 if you do a calculation with it. If false, it returns `False`, which turns into 0.
+
+## Logical Conditions Tips
+
+Handy tools for constructing logical conditions:
+  
+  `a > b`, `a >= b`, `a < b`, `a <= b`, `a == b`, or `a != b` to compare two numbers and check if `a` is above, above-or-equal, below, below-or-equal, equal (note `==` to check equality, not `=`), or not equal
+
+`a in c(b, c, d, e, f)` checks whether `a` is any of the values `b, c, d, e,` or `f`. Works for text too!
+  
+## Logical Conditions Tips
+  
+- Whatever your condition is (`condition`), just put a `not` in front to reverse `True`/`False`. `2 + 2 == 4` is `True`, but `not (2 + 2 == 4)` is `False`
+- Chain multiple conditions together! Use `and` and `or`. Be careful with parentheses if combining them! 
+
+## Selecting columns
+
+- Indexing and `.drop()` give you back just a subset of the columns. They *pick columns*
+- It can do this by name (with a vector of column names) or by column number (with `.iloc[]`)
+- Use `.drop()` to *not* pick certain columns
+
+If our data has the columns "Person", "Year", and "Income", then all of these do the same thing:
+  
+```{pandas, echo = TRUE}
+no_income = person_year_data[["Person", "Year"]]
+# a few ways to do this, but this is the most readable
+no_income = person_year_data.drop("Income", axis=1)
+no_income = person_year_data.iloc[0:1]
+print(no_income)
+```
+
+
+## .sort_values()
+
+- `.sort_values()` sorts the data. That's it! Give it the column names and it will sort the data by those columns.
+- It's often a good idea to sort your data before saving it (or looking at it) as it makes it easier to navigate
+- There are also some data manipulation tricks that rely on the position of the data
+
+```{python, echo = TRUE}
+person_year_data.sort_values(["Person","Year"])
+```
+
+## Assigning Variables
+
+- We can *assign columns/variables* by declaring their column names
+
+```{python, echo = TRUE}
+person_year_data["NextYear"] = person_year_data["Year"] + 1
+person_year_data["Above100k"] = person_year_data["Income"] > 100000
+print(person_year_data)
+```
+
+## Case assignment
+
+- A common need is in *creating* a categorical variable 
+- Use `.loc[]` to determine which rows to update, and then assign them
+- This is known as a boolean mask
+- (here we will also use `between` to help with our `.loc[]`)
+
+## Case assignment
+
+```{python, echo = TRUE}
+person_year_data["IncomeBracket"] = "Under 50k"
+person_year_data.loc[person_year_data["Income"].between(
+    50001, 100000
+), "IncomeBracket"] = "50-100k"
+person_year_data.loc[person_year_data["Income"].between(
+    100001, 120000
+), "IncomeBracket"] = "100-120k"
+person_year_data.loc[person_year_data["Income"]
+                     > 120000, "IncomeBracket"] = "Above 120k"
+```
+
+## Case assignment
+
+```{python, echo = FALSE}
+print(person_year_data)
+```
+
+## Case assignment
+
+- Note that the assignment doesn't have to be a value, it can be a calculation, for example 
+
+```{python, eval = FALSE, echo = TRUE}
+person_year_data["Inflation_Adjusted_Income"] = person_year_data["Income"]
+person_year_data.loc[person_year_data["Year"] ==
+                     2014, "Inflation_Adjusted_Income"] *= 1.001
+```
+
+- Note in that last step we are using boolean masking to change the value of just *some* of the observations, also handy   
+
+## .groupby()
+
+- `.groupby()` turns the dataset into a *grouped* data set, splitting each combination of the grouping variables
+- Calculations like `.transform()` then process the data separately by each group
+
+```{python, echo = TRUE}
+person_year_data["Income_Relative_to_Mean"] = (person_year_data["Income"]
+    - person_year_data.groupby("Person")["Income"].transform("mean"))
+```
+
+## .groupby()
+
+- How is this useful in preparing data? 
+- Remember, we want to *look at where information is* and *think about how we can get it where we need it to be*
+- `.groupby()` helps us move information *from one row to another in a key variable* - otherwise a difficult move!
+- It can also let us *change the observation level* with `.agg()`
+- Tip: `"count"` gives the number of rows in the group - handy! 
+
+## .agg()
+
+- `.agg()` *changes the observation level* to a broader level
+- It returns only *one row per group* (or one row total if the data is ungrouped)
+- So now your keys are whatever you gave to `.groupby()`
+
+```{python, echo = TRUE}
+person_year_data.groupby(
+    "Person"
+).agg(
+    {"Income": "mean", "Person": "count"}
+).rename({"Person": "YearsTracked"}, axis=1)
+```
+
+# Variable Types
+
+## Manipulating Variables
+
+- Those are the base data manipulation approaches we need to think about
+- They can be combined to do all sorts of things!
+- But important in using them is thinking about what kinds of variable manipulations we're doing
+- That will feed into our variable assignments and our `.agg()`s
+- A lot of data cleaning is making an already-tidy variable usable!
+
+## Variable Types
+
+Common variable types:
+
+- Numeric (many types!)
+- Character/string
+- Categorical
+- Date
+
+## Variable Types
+
+- You can check the types of your variables with `.dtypes`
+- You can generally convert between types using `.astype` 
+
+```{python, echo = TRUE, eval = FALSE}
+tax_data.pivot(
+    index="index",
+    columns="Value",
+    values="TaxFormRow"
+).astype(
+    {
+        "AGI": "float64",
+        "Deductible": "float64",
+        "Income": "float64",
+        "Person": "category"
+    }
+).reset_index(drop=True)
+```
+
+## Numeric Notes
+
+- Numeric data actually comes in multiple formats based on the level of acceptable precision: `float`, `int`, and so on
+- You can generally convert between types with functions like `int()`
+- But a common problem is that reading in very big integers (like ID numbers) will sometimes create `double`s that are stored in scientific notation - lumping multiple groups together! Avoid this with options like `col_types` in your data-reading function
+
+## Character/string
+
+- Specified with `""`, and `''` is also OK, especially if you need a `"` in the string
+- Use `+` to stick stuff together, or `.join()` to paste together a vector! `"h"+"ello"` is `"hello"`, `"_".join(["h","ello"])` is `"h_ello"`
+- Messy data often defaults to character. For example, a "1,000,000" in your Excel sheet might not be parsed as `1000000` but instead as a literal "1,000,000" with commas
+- Lots of details on working with these - back to them in a moment
+
+## Categorical/factor variables
+
+- Categorical variables are for when you're in one category or another
+- The `Categorical()` function lets you specify these - and they can be ordered! 
+  
+## Categorical/factor variables  
+  
+```{python, echo = TRUE}
+unsorted = pd.Categorical(
+    pd.Series(
+        [
+            "50k-100k", "Less than 50k", "50k-100k", "100k+", "100k+"
+        ]
+    ),
+    categories=[
+        "Less than 50k", "50k-100k", "100k+"
+    ],
+    ordered=True
+)
+unsorted.sort_values()
+```
+
+## Dates
+
+- Dates are the scourge of data cleaners everywhere. They're just plain hard to work with!
+- Thankfully **pandas** does at least consolidate variable types into `datetime`
+- I won't go into detail here, but there is a good guide [here](https://towardsdatascience.com/working-with-datetime-in-pandas-dataframe-663f7af6c587). Even then it's tricky - dates never want to do what you want them to!
+
+## Characters/strings
+
+- Back to strings!
+- Even if your data isn't textual, working with strings is a very common aspect of preparing data for analysis
+- Some are straightforward, for example using boolean masks to fix typos/misspellings in the data
+- But other common tasks in data cleaning include: getting substrings, splitting strings, cleaning strings, and detecting patterns in strings
+
+## Getting Substrings
+
+- When working with things like nested IDs (for example, NAICS codes are six digits, but the first two and first four digits have their own meaning), you will commonly want to pick just a certain range of characters
+- You can index the characters of the string like it's an array
+- `string[start:end]` will do this. `"hello"[1:3]` is `'ell'`
+- Note negative values read from end of string. `"hello"[-1]` is `'o'`
+
+## Getting Substrings
+
+- For example, geographic Census Block Group indicators are 13 digits, the first two of which are the state FIPS code
+
+```{python, echo = TRUE}
+cbg = pd.DataFrame({"cbg":[152371824231, 1031562977281]},dtype=str)
+cbg["state_fips"] = cbg["cbg"].apply(lambda x: x[0:2] if len(x) == 13 else x[0:1])
+cbg
+```
+
+## Strings
+
+- **Lots** of data will try to stick multiple pieces of information in a single cell, so you need to split it out! 
+- Generically, `str.split()` will do this. `"a,b".split(",")` is `["a","b"]`
+- Often in already-tidy data, you want `.str.split()`. Make sure to rename as appropriate!
+
+```{python, echo = TRUE}
+category = pd.DataFrame({"category": ["Sales,Marketing", "H&R,Marketing"]})
+category["category"].str.split(",", expand=True).rename({0: "Category1",1: "Category2"},axis=1)
+```
+
+## Cleaning Strings
+
+- Strings sometimes come with unwelcome extras! Garbage or extra whitespace at the beginning or end, or badly-used characters
+- `.strip()` removes beginning/end whitespace, `" hi hello ".strip()` is `"hi hello"`. See also `.rstrip()` and `lstrip()` for one-sided versions
+- `.str.replace()` is often handy for eliminating (or fixing) unwanted characters
+
+```{python, echo = TRUE}
+number = pd.DataFrame({"number": ["1,000", "2,003,124"]})
+number["number"].str.replace(",", "").astype(int)
+```
+
+## Detecting Patterns in Strings
+
+- Often we want to do something a bit more complex. Unfortunately, this requires we dip our toes into the bottomless well that is *regular expressions*
+- Regular expressions are ways of describing patterns in strings so that the computer can recognize them. Technically this is what we did with `.str.replace(",","")` - `","` is a regular expression saying "look for a comma"
+- There are a *lot* of options here. See the [guide](https://stringr.tidyverse.org/articles/regular-expressions.html)
+- Common: `[0-9]` to look for a digit, `[a-zA-Z]` for letters, `*` to repeat until you see the next thing... hard to condense here. Read the guide.
+
+## Detecting Patterns in Strings
+
+- For example, some companies are publicly listed and we want to indicate that but not keep the ticker. `separate()` won't do it here, not easily!
+  - On the next page we'll use the regular expression `'\\([A-Z].*\\)'`
+- `'\\([A-Z].*\\)'` says "look for a (" (note the `\\` to treat the usually-special ( character as an actual character), then "Look for a capital letter `[A-Z]`", then "keep looking for capital letters `.*`", then "look for a )"
+
+## Detecting Patterns in Strings
+
+```{python, echo = TRUE}
+companies = pd.DataFrame({"name":["Amazon (AMZN) Holdings", "Cargill Corp. (cool place!)"]})
+companies["publicly_listed"] = companies["name"].str.contains("\\([A-Z].*\\)")
+companies["name"] = companies["name"].str.replace("\\([A-Z].*\\)", "")
+print(companies)
+```
+
+
+# Using Data Structure
+
+## Using Data Structure
+
+- One of the core steps of data wrangling we discussed is thinking about how to get information from where it is now to where you want it
+- A tough thing about tidy data is that it can be a little tricky to move data *into different rows than it currently is*
+- This is often necessary when `.agg()`ing, or when doing things like "calculate growth from an initial value"
+- But we can solve this with the use of *sort_values()* along with other-row-referencing functions like indexing, perhaps combined with `.head()`
+
+## Using Data Structure
+
+```{python, echo = TRUE}
+stock_data = pd.DataFrame({"ticker": ["AMZN", "AMZN", "AMZN", "WMT", "WMT", "WMT"],
+        "date": [ "2020-03-04", "2020-03-05", "2020-03-06", "2020-03-04","2020-03-05", "2020-03-06"],
+        "stock_price": [103, 103.4, 107, 85.2, 86.3, 85.6]})
+stock_data["date"] = pd.to_datetime(stock_data["date"])
+```
+
+## Using Data Structure
+
+- `.head()` and `.tail()` refer to the first and last rows, naturally
+
+```{python, echo = TRUE}
+stock_data["price_growth_since_march_4"] = stock_data.sort_values(["ticker", "date"]).groupby(
+    "ticker")["stock_price"].apply(lambda x: x/x.head(1).values[0] - 1)
+print(stock_data)
+```
+
+## Using Data Structure
+
+- `shift()` looks to the row a certain number above/below this one, based on the `n` argument
+- Careful! `shift()` doesn't care about *time* structure, it only cares about *data* structure. If you want daily growth but the row above is last year, too bad!
+  
+## Using Data Structure
+  
+```{python, echo = TRUE}
+stock_data["daily_price_growth"] = (stock_data["stock_price"]/stock_data.sort_values(["ticker", "date"]).groupby(
+    "ticker")["stock_price"].shift(1) - 1)
+stock_data
+```
+
+
+## Trickier Stuff
+
+- Sometimes the kind of data you want to move from one row to another is more complex!
+- You can get stuff that might not normally be first or last by filtering on the values you want before `.transform()`ing
+
+## Trickier Stuff
+
+```{python, echo = FALSE}
+grades = pd.DataFrame(
+    {
+        "person":
+        [
+            "Adam", "James", "Diego", "Beth", "Francis", "Qian",
+            "Ryan", "Selma"
+        ],
+        "school_grade":
+        [
+            6, 7, 7, 8, 6, 7, 8, 8
+        ],
+        "subject":
+        [
+            "Math", "Math", "English", "Science", "English",
+            "Science", "Math", "PE"
+        ],
+        "test_score":
+        [
+            80, 84, 67, 87, 55, 75, 85, 70
+        ]
+    }
+)
+print(grades)
+```
+
+## Trickier Stuff
+
+```{python, echo = TRUE}
+grades["math_scores"] = grades.loc[
+    grades["subject"] == "Math"
+].groupby(
+    ["school_grade"]
+)["test_score"].transform("mean")
+grades["Math_Average_In_This_Grade"] = grades.groupby(
+    "school_grade"
+)["math_scores"].transform("max")
+grades.drop("math_scores", axis=1)
+```
+
+## Trickier Stuff
+
+```{python, echo = TRUE}
+print(grades)
+```
+
+# Automation
+
+## Automation
+
+- Data cleaning is often very repetitive
+- You shouldn't let it be!
+- Not just to save yourself work and tedium, but also because standardizing your process so you only have to write the code *once* both reduces errors and means that if you have to change something you only have to change it once
+- So let's automate! Two ways we'll do it here: for loops across columns, for loops more generally, and writing functions
+
+## for loops across columns
+
+- If you have a lot of variables, cleaning them all can be a pain. Who wants to write out the same thing a million times, say to convert all those read-in-as-text variables to numeric?
+- Variable selectors like `.startswith()` helps you apply a given function to a lot of the right columns at once in addition to regular ways like `1:5`
+
+## startswith
+
+```{python, echo = TRUE}
+stock_data["price_growth_since_march_4"] = stock_data.sort_values(["ticker", "date"]).groupby("ticker")["stock_price"].apply(
+    lambda x: x/x.head(1).values[0] - 1)
+
+stock_data["price_growth_daily"] = (stock_data["stock_price"] / stock_data.sort_values(["ticker", "date"]).groupby(
+    "ticker")["stock_price"].shift(1) - 1)
+```
+
+## startswith
+
+- `.startswith("price_growth")` is the same here as `4:5` or `["price_growth_since_march_4", "price_growth_daily"]`
+
+
+```{python, echo = TRUE}
+growth_cols = [col for col in stock_data.columns if col.startswith("price_growth")]
+stock_growth = stock_data.copy()
+stock_growth[growth_cols] *= 10000
+
+print(stock_growth)
+```
+
+## Multiple functions at once
+
+```{python, echo = TRUE}
+# Undo what we just did
+stock_growth[growth_cols] /= 10000
+for col in growth_cols:
+    stock_growth[col+"_pct"] = stock_growth[col] * 100
+    stock_growth[col+"_bps"] = stock_growth[col] * 10000
+print(stock_growth)
+```
+
+```{python, echo = FALSE}
+stock_data = stock_data[["ticker", "date", "stock_price"]]
+stock_data["stock_price_pounds"] = stock_data.loc[:,
+                                                  (stock_data.dtypes ==
+                                                   "float64")
+                                                  ]/1.36
+```
+
+
+## Writing Functions
+
+- Generally, **if you're going to do the same thing more than once, you're probably better off writing a function**
+  - Reduces errors, saves time, makes code reusable later!
+  
+```{python, echo = TRUE, eval = FALSE}
+def function_name(argument1: list = None,
+                  argument2: set = set()) -> set:
+    """This function has type hints AND a doc string. What
+    a life of luxury this is."""
+    # do some stuff
+    some_value = 100*argument1
+    another_value = argument2/set(some_value)
+    return another_value
+    # alternatively, without saving another_value
+    # return argument2/some_value
+```
+
+## Function-writing tips
+
+- Make sure to think about what kind of values your function accepts and make sure that what it returns is consistent so you know what you're getting
+- This is a really deep topic to cover in two slides, and mostly I just want to poke you and encourage you to do it. At least, if you find yourself doing something a bunch of times in a row, just take the code, stick it inside a `def` wrapper, and instead use a bunch of calls to that function in a row
+
+# Finishing Up, and an Example!
+
+## Some Final Notes
+
+- We can't possibly cover everything. So one last note, about saving your data! 
+- What to do when you're done and want to save your processed data?
+- There are a bunch of formats, one of which is parquet with `to_parquet()`
+- Saving data for sharing: `to_csv()` makes a CSV. Yay!
+
+## Some Final Notes
+
+- Also, please, please, *please* **DOCUMENT YOUR DATA**
+- At the very least, keep a spreadsheet/\code{DataFrame}\dictionary with a set of descriptions for each of your variables
+
+## A Walkthrough
+
+- Let's clean some data!
